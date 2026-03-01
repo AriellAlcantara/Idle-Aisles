@@ -2,24 +2,24 @@ The UI was made but there's no assets for it yet, I am gonna start the game next
 
 Plan of action:
 
-Make basic UI(Screens and stuff like that) NO ASSETS
+Make basic UI(Screens and stuff like that) NO ASSETS **DONE**
 
 v
 
-Make a plane and make the game work for now
+Make a plane and make the game work for now **MONDAY(Tomorrow)**
 
 v
 
-Slowly add the features I proposed in the GDD
+Slowly add the features I proposed in the GDD **FRIDAY/SUNDAY(Same week)**
 
 v
 
-Make the level(The supermarket)
+Make the level(The supermarket)**SUNDAY/MONDAY(Next week)**
 
 v
 
-After the game is more or less done I go back to the menu and the stuff.
+After the game is more or less done I go back to the menu and the stuff. **????(Unknown)**
 
 v
 
-Polishing.
+Polishing. **????(Unknown)**
