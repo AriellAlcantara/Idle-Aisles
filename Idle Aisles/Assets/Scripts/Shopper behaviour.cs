@@ -18,6 +18,25 @@ public class Shopper_behaviour : MonoBehaviour
     // small distance to consider "arrived"
     private const float arriveThreshold = 0.2f;
 
+    // Track whether this shopper has already paid to prevent double payment
+    private bool hasPaid = false;
+
+    // Track whether this shopper is currently carrying a product (should only pick once)
+    private bool hasPickedUp = false;
+
+    // Public read-only accessors
+    public bool HasPaid => hasPaid;
+    public bool HasPickedUp => hasPickedUp;
+
+    // Mark shopper as paid
+    public void MarkAsPaid()
+    {
+        hasPaid = true;
+    }
+
+    // Prevent handling arrival repeatedly while waiting/processing
+    private bool isProcessingTarget = false;
+
     void Start()
     {
         // Start by finding the closest Path object
@@ -37,9 +56,10 @@ public class Shopper_behaviour : MonoBehaviour
         // Move towards the current target
         transform.position = Vector3.MoveTowards(transform.position, target.position, speed * Time.deltaTime);
 
-        // Arrived?
-        if (Vector3.Distance(transform.position, target.position) <= arriveThreshold)
+        // Arrived? Only trigger arrival handling once until it sets next target.
+        if (!isProcessingTarget && Vector3.Distance(transform.position, target.position) <= arriveThreshold)
         {
+            isProcessingTarget = true;
             OnReachedTarget();
         }
     }
@@ -47,32 +67,94 @@ public class Shopper_behaviour : MonoBehaviour
     private void OnReachedTarget()
     {
         if (target == null)
+        {
+            isProcessingTarget = false;
             return;
+        }
 
         string tname = target.name.ToLowerInvariant();
 
         if (tname.Contains("path"))
         {
-            // Arrived at the path -> choose a random pickup
-            Transform pickup = FindRandomByNameSubstring("Pick-up", "Pickup", "Pickup");
+            // Arrived at the path -> choose a random pickup that still has products
+            Transform pickup = FindRandomPickupWithProducts();
             if (pickup != null)
             {
                 target = pickup;
+                // allow arrival handling again when shopper reaches the new pickup
+                isProcessingTarget = false;
             }
             else
             {
-                Debug.LogWarning("Shopper_behaviour: No Pick-up object found.");
+                // No pickups available: go to exit
+                Transform exit = FindClosestByNameSubstring("exit");
+                if (exit != null)
+                    target = exit;
+                else
+                    Debug.LogWarning("Shopper_behaviour: No Pick-up available and no exit found.");
+
+                isProcessingTarget = false;
             }
         }
         else if (tname.Contains("pick")) // covers pick-up / pickup
         {
-            // At pickup: wait pickupWait then go to a drop-off
-            StartCoroutine(WaitThenGoToNext(dropoffWait: dropoffWait, nextNameSubstrings: new string[] { "Drop-off", "Dropoff", "Drop" }));
+            // If shopper already has a product, go to drop-off instead of taking another
+            if (hasPickedUp)
+            {
+                Transform drop = FindRandomByNameSubstring("Drop-off", "Dropoff", "Drop");
+                if (drop != null)
+                {
+                    target = drop;
+                }
+                else
+                {
+                    Transform exit = FindClosestByNameSubstring("exit");
+                    if (exit != null) target = exit;
+                }
+
+                isProcessingTarget = false;
+                return;
+            }
+
+            // At pickup: attempt to take product. If successful, set hasPickedUp and wait then go to a drop-off.
+            var storage = target.GetComponent<AislesStorage>();
+            bool took = false;
+            if (storage != null)
+            {
+                took = storage.TryTakeProduct();
+            }
+
+            if (took)
+            {
+                hasPickedUp = true;
+                // proceed normally (keep isProcessingTarget true until coroutine sets next target)
+                StartCoroutine(WaitThenGoToNext(pickupWait: pickupWait, nextNameSubstrings: new string[] { "Drop-off", "Dropoff", "Drop" }));
+            }
+            else
+            {
+                // This pickup is empty (or has no storage) - try another pickup
+                Transform nextPick = FindRandomPickupWithProducts(exclude: target);
+                if (nextPick != null)
+                {
+                    target = nextPick;
+                    // allow arrival handling again at the new pickup
+                    isProcessingTarget = false;
+                }
+                else
+                {
+                    // No pickups left - go to exit
+                    Transform exit = FindClosestByNameSubstring("exit");
+                    if (exit != null)
+                        target = exit;
+
+                    isProcessingTarget = false;
+                }
+            }
         }
         else if (tname.Contains("drop"))
         {
             // At drop-off: wait dropoffWait then go to exit
-            StartCoroutine(WaitThenGoToNext(exitWait: dropoffWait, nextNameSubstrings: new string[] { "exit" }));
+            StartCoroutine(WaitThenGoToNext(dropoffWait: dropoffWait, nextNameSubstrings: new string[] { "exit" }));
         }
         else if (tname == "exit" || tname.Contains("exit"))
         {
@@ -85,6 +167,8 @@ public class Shopper_behaviour : MonoBehaviour
             Transform exit = FindClosestByNameSubstring("exit");
             if (exit != null)
                 target = exit;
+
+            isProcessingTarget = false;
         }
     }
 
@@ -121,6 +205,9 @@ public class Shopper_behaviour : MonoBehaviour
                 Debug.LogWarning($"Shopper_behaviour: Could not find next target matching: {string.Join(",", nextNameSubstrings)}");
             }
         }
+
+        // Allow arrival handling for the next target
+        isProcessingTarget = false;
     }
 
     // Find the closest transform whose name contains any of the provided substrings (case-insensitive)
@@ -132,6 +219,10 @@ public class Shopper_behaviour : MonoBehaviour
         foreach (var tr in all)
         {
             if (tr == null)
+                continue;
+
+            // skip inactive objects
+            if (!tr.gameObject.activeInHierarchy)
                 continue;
 
             string lname = tr.name.ToLowerInvariant();
@@ -169,6 +260,10 @@ public class Shopper_behaviour : MonoBehaviour
             if (tr == null)
                 continue;
 
+            // skip inactive objects
+            if (!tr.gameObject.activeInHierarchy)
+                continue;
+
             string lname = tr.name.ToLowerInvariant();
             foreach (var s in nameSubstrings)
             {
@@ -176,6 +271,41 @@ public class Shopper_behaviour : MonoBehaviour
                 {
                     matches.Add(tr);
                     break;
+                }
+            }
+        }
+
+        if (matches.Count == 0)
+            return null;
+
+        int idx = Random.Range(0, matches.Count);
+        return matches[idx];
+    }
+
+    // Find a random pickup GameObject that has AislesStorage and products available.
+    // Optionally exclude a transform (for example, the one just tried).
+    private Transform FindRandomPickupWithProducts(Transform exclude = null)
+    {
+        var all = GameObject.FindObjectsOfType<Transform>();
+        var matches = new System.Collections.Generic.List<Transform>();
+        foreach (var tr in all)
+        {
+            if (tr == null)
+                continue;
+
+            if (!tr.gameObject.activeInHierarchy)
+                continue;
+
+            if (exclude != null && tr == exclude)
+                continue;
+
+            string lname = tr.name.ToLowerInvariant();
+            if (lname.Contains("pick") || lname.Contains("pick-up") || lname.Contains("pickup"))
+            {
+                var storage = tr.GetComponent<AislesStorage>();
+                if (storage != null && storage.HasProducts)
+                {
+                    matches.Add(tr);
                 }
             }
         }
