@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 public static class CoinManager
@@ -6,10 +7,14 @@ public static class CoinManager
 
     public static int Coins => coins;
 
+    // Event fired when coin total changes. Subscribers receive the new total.
+    public static event Action<int> OnCoinsChanged;
+
     public static void AddCoins(int amount)
     {
         if (amount <= 0) return;
         coins += amount;
+        OnCoinsChanged?.Invoke(coins);
     }
 
     public static bool SpendCoins(int amount)
@@ -17,6 +22,7 @@ public static class CoinManager
         if (amount <= 0) return false;
         if (coins < amount) return false;
         coins -= amount;
+        OnCoinsChanged?.Invoke(coins);
         return true;
     }
 }

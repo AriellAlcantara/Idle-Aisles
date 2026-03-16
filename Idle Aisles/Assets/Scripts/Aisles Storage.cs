@@ -3,17 +3,17 @@ using UnityEngine;
 public class AislesStorage : MonoBehaviour
 {
     [Tooltip("Current number of products available at this pickup")]
-    public int productCount = 5;
+    public float productCount = 5f;
 
     [Tooltip("Maximum capacity of products this pickup can hold")]
-    public int maxProductCount = 5;
+    public float maxProductCount = 5f;
 
     // Optional components to toggle when out of stock
     private Collider pickupCollider;
     private Renderer[] renderers;
 
     // Whether there are any products left
-    public bool HasProducts => productCount > 0;
+    public bool HasProducts => productCount > 0f;
 
     void Awake()
     {
@@ -21,8 +21,8 @@ public class AislesStorage : MonoBehaviour
         renderers = GetComponentsInChildren<Renderer>(includeInactive: true);
 
         // Clamp values
-        if (maxProductCount < 0) maxProductCount = 0;
-        productCount = Mathf.Clamp(productCount, 0, maxProductCount);
+        if (maxProductCount < 0f) maxProductCount = 0f;
+        productCount = Mathf.Clamp(productCount, 0f, maxProductCount);
 
         if (!HasProducts)
             SetUnavailable();
@@ -33,12 +33,12 @@ public class AislesStorage : MonoBehaviour
     // Attempt to take a product. Returns true if successful, false if none left.
     public bool TryTakeProduct()
     {
-        if (productCount <= 0)
+        if (productCount <= 0f)
             return false;
 
-        productCount--;
+        productCount -= 1f;
 
-        if (productCount <= 0)
+        if (productCount <= 0f)
         {
             OnOutOfProducts();
         }
@@ -46,14 +46,14 @@ public class AislesStorage : MonoBehaviour
         return true;
     }
 
-    // Replenish products by amount (clamped to max). Returns true if any product was added.
-    public bool Replenish(int amount)
+    // Replenish products by amount (can be fractional). Returns true if any product was added.
+    public bool Replenish(float amount)
     {
-        if (amount <= 0) return false;
+        if (amount <= 0f) return false;
 
-        int before = productCount;
-        productCount = Mathf.Clamp(productCount + amount, 0, maxProductCount);
-        if (productCount > 0 && before <= 0)
+        float before = productCount;
+        productCount = Mathf.Clamp(productCount + amount, 0f, maxProductCount);
+        if (productCount > 0f && before <= 0f)
         {
             OnRestocked();
         }

@@ -7,13 +7,21 @@ public class YieldSystem : MonoBehaviour
     public float replenishInterval = 10f;
 
     [Tooltip("Amount to restore to each aisle per tick (if 0 and fullReplenish true, restocks to max)")]
-    public int replenishAmount = 1;
+    public float replenishAmount = 1f; // changed to float to support fractional increases
 
     [Tooltip("If true, replenish to maxProductCount instead of adding replenishAmount")]
     public bool fullReplenish = false;
 
+    [Tooltip("If true, replenish will run on Start (use false to control externally)")]
+    public bool autoStart = true;
+
+    [Tooltip("If true, replenish will fully restock when replenishing (overrides replenishAmount)")]
+    public bool fullOnReplenish = false;
+
     private void Start()
     {
+        if (!autoStart) return;
+
         if (replenishInterval <= 0f)
             replenishInterval = 1f;
 
@@ -36,9 +44,9 @@ public class YieldSystem : MonoBehaviour
         foreach (var s in storages)
         {
             if (s == null) continue;
-            if (fullReplenish)
+            if (fullReplenish || fullOnReplenish)
             {
-                int toAdd = s.maxProductCount - s.productCount;
+                int toAdd = Mathf.CeilToInt(s.maxProductCount - s.productCount);
                 if (toAdd > 0)
                     s.Replenish(toAdd);
             }

@@ -12,6 +12,25 @@ public class Shopper_behaviour : MonoBehaviour
     [Tooltip("Seconds to wait at drop-off")]
     public float dropoffWait = 3f;
 
+    [Tooltip("Degrees per second to rotate toward movement direction")]
+    public float rotationSpeed = 720f;
+
+    // Animator
+    [Tooltip("Animator component used for shopper animations (optional, will be found on the GameObject or children)")]
+    public Animator animator;
+
+    [Tooltip("Bool parameter name to enable walking animation (Set true while moving)")]
+    public string walkBoolName = "isWalking";
+
+    [Tooltip("Trigger parameter name to play pick-up / interact animation")]
+    public string pickTriggerName = "PickUp";
+
+    [Tooltip("Animator state name for the pick-up interaction. Use exact state name or 'LayerName.StateName' if needed.")]
+    public string pickStateName = "PickUp";
+
+    [Tooltip("If > 0, override waiting for animator state by waiting this many seconds for the interaction to complete")]
+    public float interactionDuration = 0f;
+
     // current movement target
     private Transform target;
 
@@ -37,6 +56,15 @@ public class Shopper_behaviour : MonoBehaviour
     // Prevent handling arrival repeatedly while waiting/processing
     private bool isProcessingTarget = false;
 
+    void Awake()
+    {
+        if (animator == null)
+        {
+            // try to find an Animator on this object or its children
+            animator = GetComponentInChildren<Animator>();
+        }
+    }
+
     void Start()
     {
         // Start by finding the closest Path object
@@ -46,6 +74,8 @@ public class Shopper_behaviour : MonoBehaviour
         {
             Debug.LogWarning("Shopper_behaviour: No Path object found in the scene.");
         }
+
+        UpdateWalkAnimation();
     }
 
     void Update()
@@ -53,8 +83,17 @@ public class Shopper_behaviour : MonoBehaviour
         if (target == null)
             return;
 
-        // Move towards the current target
-        transform.position = Vector3.MoveTowards(transform.position, target.position, speed * Time.deltaTime);
+        // Move only when not processing an interaction so shopper waits at pickup/drop-off
+        if (!isProcessingTarget)
+        {
+            transform.position = Vector3.MoveTowards(transform.position, target.position, speed * Time.deltaTime);
+        }
+
+        // Rotate to face movement direction (allow rotation even while waiting)
+        UpdateRotation();
+
+        // Update walking animation depending on movement; suppress walking while processing
+        UpdateWalkAnimation();
 
         // Arrived? Only trigger arrival handling once until it sets next target.
         if (!isProcessingTarget && Vector3.Distance(transform.position, target.position) <= arriveThreshold)
@@ -62,6 +101,60 @@ public class Shopper_behaviour : MonoBehaviour
             isProcessingTarget = true;
             OnReachedTarget();
         }
+    }
+
+    private void UpdateRotation()
+    {
+        if (target == null)
+            return;
+
+        Vector3 dir = target.position - transform.position;
+        dir.y = 0f; // keep only horizontal direction
+
+        if (dir.sqrMagnitude < 0.0001f)
+            return;
+
+        Quaternion desired = Quaternion.LookRotation(dir);
+        transform.rotation = Quaternion.RotateTowards(transform.rotation, desired, rotationSpeed * Time.deltaTime);
+    }
+
+    private void UpdateWalkAnimation()
+    {
+        if (animator == null) return;
+
+        // Do not play walk animation while processing interaction/waiting
+        if (isProcessingTarget)
+        {
+            SetWalk(false);
+            return;
+        }
+
+        if (target == null)
+        {
+            SetWalk(false);
+            return;
+        }
+
+        float dist = Vector3.Distance(transform.position, target.position);
+        SetWalk(dist > arriveThreshold);
+    }
+
+    private void SetWalk(bool value)
+    {
+        if (animator == null || string.IsNullOrEmpty(walkBoolName)) return;
+        animator.SetBool(walkBoolName, value);
+    }
+
+    private void TriggerPickAnimation()
+    {
+        if (animator == null || string.IsNullOrEmpty(pickTriggerName))
+        {
+            Debug.LogWarning($"Shopper_behaviour: Cannot trigger pick animation - animator or pickTriggerName missing on '{gameObject.name}'");
+            return;
+        }
+
+        animator.SetTrigger(pickTriggerName);
+        Debug.Log($"Shopper_behaviour: Triggered pick animation '{pickTriggerName}' on '{gameObject.name}'");
     }
 
     private void OnReachedTarget()
@@ -83,6 +176,7 @@ public class Shopper_behaviour : MonoBehaviour
                 target = pickup;
                 // allow arrival handling again when shopper reaches the new pickup
                 isProcessingTarget = false;
+                UpdateWalkAnimation();
             }
             else
             {
@@ -94,6 +188,7 @@ public class Shopper_behaviour : MonoBehaviour
                     Debug.LogWarning("Shopper_behaviour: No Pick-up available and no exit found.");
 
                 isProcessingTarget = false;
+                UpdateWalkAnimation();
             }
         }
         else if (tname.Contains("pick")) // covers pick-up / pickup
@@ -113,10 +208,11 @@ public class Shopper_behaviour : MonoBehaviour
                 }
 
                 isProcessingTarget = false;
+                UpdateWalkAnimation();
                 return;
             }
 
-            // At pickup: attempt to take product. If successful, set hasPickedUp and wait then go to a drop-off.
+            // At pickup: attempt to take product. If successful, set hasPickedUp, determine next target but DO NOT assign it yet
             var storage = target.GetComponent<AislesStorage>();
             bool took = false;
             if (storage != null)
@@ -127,8 +223,17 @@ public class Shopper_behaviour : MonoBehaviour
             if (took)
             {
                 hasPickedUp = true;
-                // proceed normally (keep isProcessingTarget true until coroutine sets next target)
-                StartCoroutine(WaitThenGoToNext(pickupWait: pickupWait, nextNameSubstrings: new string[] { "Drop-off", "Dropoff", "Drop" }));
+
+                // Decide next target now but do not set it until after the wait
+                Transform next = FindRandomByNameSubstring("Drop-off", "Dropoff", "Drop");
+                if (next == null)
+                    next = FindClosestByNameSubstring("exit");
+
+                // play pick-up animation
+                TriggerPickAnimation();
+
+                // wait then assign next target
+                StartCoroutine(WaitThenAssignNext(next, pickupWait, true));
             }
             else
             {
@@ -139,6 +244,7 @@ public class Shopper_behaviour : MonoBehaviour
                     target = nextPick;
                     // allow arrival handling again at the new pickup
                     isProcessingTarget = false;
+                    UpdateWalkAnimation();
                 }
                 else
                 {
@@ -148,13 +254,17 @@ public class Shopper_behaviour : MonoBehaviour
                         target = exit;
 
                     isProcessingTarget = false;
+                    UpdateWalkAnimation();
                 }
             }
         }
         else if (tname.Contains("drop"))
         {
-            // At drop-off: wait dropoffWait then go to exit
-            StartCoroutine(WaitThenGoToNext(dropoffWait: dropoffWait, nextNameSubstrings: new string[] { "exit" }));
+            // At drop-off: determine exit but DO NOT assign it until after the interaction wait
+            Transform next = FindClosestByNameSubstring("exit");
+
+            TriggerPickAnimation();
+            StartCoroutine(WaitThenAssignNext(next, dropoffWait, true));
         }
         else if (tname == "exit" || tname.Contains("exit"))
         {
@@ -169,45 +279,84 @@ public class Shopper_behaviour : MonoBehaviour
                 target = exit;
 
             isProcessingTarget = false;
+            UpdateWalkAnimation();
         }
     }
 
-    private IEnumerator WaitThenGoToNext(float pickupWait = 0f, float dropoffWait = 0f, float exitWait = 0f, string[] nextNameSubstrings = null)
+    // New coroutine: wait using same rules as before, then set the next target
+    private IEnumerator WaitThenAssignNext(Transform nextTarget, float waitParam, bool waitForPickAnimation)
     {
-        // Decide which wait to use (only one will be > 0 when called appropriately)
+        // Wait period selection mirrors previous logic
+        if (waitForPickAnimation)
+        {
+            if (interactionDuration > 0f)
+            {
+                yield return new WaitForSeconds(interactionDuration);
+            }
+            else if (animator != null && !string.IsNullOrEmpty(pickStateName))
+            {
+                yield return new WaitWhile(() =>
+                {
+                    var st = animator.GetCurrentAnimatorStateInfo(0);
+                    return st.IsName(pickStateName) || animator.IsInTransition(0);
+                });
+            }
+            else
+            {
+                if (waitParam > 0f)
+                    yield return new WaitForSeconds(waitParam);
+            }
+        }
+        else
+        {
+            if (waitParam > 0f)
+                yield return new WaitForSeconds(waitParam);
+        }
+
+        // assign next and allow processing again
+        if (nextTarget != null)
+            target = nextTarget;
+
+        isProcessingTarget = false;
+        UpdateWalkAnimation();
+    }
+
+    // Original WaitThenGoToNext preserved for compatibility (kept but not used by new flow)
+    private IEnumerator WaitThenGoToNext(float pickupWait = 0f, float dropoffWait = 0f, float exitWait = 0f, bool waitForPickAnimation = false)
+    {
         float wait = pickupWait;
         if (wait <= 0f) wait = dropoffWait;
         if (wait <= 0f) wait = exitWait;
 
-        if (wait > 0f)
-            yield return new WaitForSeconds(wait);
-
-        // Find next target by provided substrings
-        if (nextNameSubstrings != null && nextNameSubstrings.Length > 0)
+        if (waitForPickAnimation)
         {
-            // If next is exit, prefer closest; otherwise pick random matching
-            bool isExit = false;
-            foreach (var s in nextNameSubstrings)
-                if (s.ToLowerInvariant().Contains("exit")) isExit = true;
-
-            Transform next = null;
-            if (isExit)
-                next = FindClosestByNameSubstring(nextNameSubstrings);
-            else
-                next = FindRandomByNameSubstring(nextNameSubstrings);
-
-            if (next != null)
+            // If an explicit interaction duration was provided, use it
+            if (interactionDuration > 0f)
             {
-                target = next;
+                yield return new WaitForSeconds(interactionDuration);
+            }
+            else if (animator != null && !string.IsNullOrEmpty(pickStateName))
+            {
+                yield return new WaitWhile(() =>
+                {
+                    var st = animator.GetCurrentAnimatorStateInfo(0);
+                    return st.IsName(pickStateName) || animator.IsInTransition(0);
+                });
             }
             else
             {
-                Debug.LogWarning($"Shopper_behaviour: Could not find next target matching: {string.Join(",", nextNameSubstrings)}");
+                if (wait > 0f)
+                    yield return new WaitForSeconds(wait);
             }
         }
+        else
+        {
+            if (wait > 0f)
+                yield return new WaitForSeconds(wait);
+        }
 
-        // Allow arrival handling for the next target
         isProcessingTarget = false;
+        UpdateWalkAnimation();
     }
 
     // Find the closest transform whose name contains any of the provided substrings (case-insensitive)
