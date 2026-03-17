@@ -1,25 +1,5 @@
-The UI was made but there's no assets for it yet, I am gonna start the game next week Friday and continue on sunday during my off days.
+Game is finished for now,
 
-Plan of action:
-
-Make basic UI(Screens and stuff like that) NO ASSETS **DONE**
-
-v
-
-Make a plane and make the game work for now **MONDAY(Tomorrow)**
-
-v
-
-Slowly add the features I proposed in the GDD **FRIDAY/SUNDAY(Same week)**
-
-v
-
-Make the level(The supermarket)**SUNDAY/MONDAY(Next week)**
-
-v
-
-After the game is more or less done I go back to the menu and the stuff. **????(Unknown)**
-
-v
-
-Polishing. **????(Unknown)**
+Gdrive for game:
+https://drive.google.com/drive/folders/1Z9E1Ow9mD2Qe7ydQB-3gyZUtzqeCM214?usp=sharing
+Gdrive for presentation:
