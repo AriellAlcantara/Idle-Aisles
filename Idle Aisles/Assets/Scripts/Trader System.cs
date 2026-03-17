@@ -116,9 +116,22 @@ public class TraderSystem : MonoBehaviour
 
             if (trader3Progress >= target)
             {
-                // Completed this milestone: award extra coin per shopper
-                CoinManager.ExtraPerShopper += 1;
-                Debug.Log($"Trader3 quest: completed milestone {target}. ExtraPerShopper is now {CoinManager.ExtraPerShopper}.");
+                // Completed this milestone: increase global coins-per-shopper bonus
+                CounterBehaviour.GlobalCoinsBonus += 1;
+
+                // Also apply immediately to existing counters so effect is instant
+                var counters = FindObjectsOfType<CounterBehaviour>();
+                int applied = 0;
+                foreach (var c in counters)
+                {
+                    if (c != null)
+                    {
+                        c.coinsPerShopper += 1;
+                        applied++;
+                    }
+                }
+
+                Debug.Log($"Trader3 quest: completed milestone {target}. GlobalCoinsBonus is now {CounterBehaviour.GlobalCoinsBonus}. Applied to {applied} existing counters.");
 
                 // move to next milestone and reset progress to 0 (explicitly as requested)
                 trader3Index++;
@@ -168,7 +181,7 @@ public class TraderSystem : MonoBehaviour
             int target = trader3Milestones[trader3Index];
             // Label indicates this is coins-earned progress so player knows they don't need to keep the coins
             string t3Label = $"Trader 3: Coins Earned {trader3Progress}/{target} (Coins earned increase)";
-            if (CoinManager.ExtraPerShopper > 0)
+            if (CounterBehaviour.GlobalCoinsBonus > 0)
                 t3Label += " (Coins earned increased)";
 
             SetText(trader3Label, trader3LabelTMP, t3Label);

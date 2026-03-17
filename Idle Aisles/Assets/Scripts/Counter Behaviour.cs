@@ -5,9 +5,18 @@ public class CounterBehaviour : MonoBehaviour
     [Tooltip("Coins awarded when a shopper leaves the counter")]
     public int coinsPerShopper = 1;
 
+    // Global bonus applied to newly spawned counters (incremented by ads / trader rewards)
+    public static int GlobalCoinsBonus = 0;
+
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
+        // Apply any global bonus to this instance so newly spawned counters receive prior rewards
+        if (GlobalCoinsBonus != 0)
+        {
+            coinsPerShopper += GlobalCoinsBonus;
+        }
+
         // Optionally verify this is attached to a Drop-off object
         if (!IsDropOff())
         {

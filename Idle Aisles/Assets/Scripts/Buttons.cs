@@ -17,7 +17,7 @@ public class Buttons : MonoBehaviour
     public Text pauseButtonText;
 
     [Tooltip("TMP Text component for pause button (use this if using TextMeshPro)")]
-#if UNITY_TEXTMESHPRO_PRESENT
+#if TMP_PRESENT
     public TMPro.TMP_Text pauseButtonTMPText;
 #else
     public UnityEngine.Object pauseButtonTMPText; // kept to avoid compile errors if TMP not present
@@ -61,6 +61,42 @@ public class Buttons : MonoBehaviour
 
     [Tooltip("Quit game button inside pause panel - exits application")]
     public Button pauseQuitGameButton;
+
+    [Tooltip("Shop button inside pause panel - opens the shop panel and hides pause menu")]
+    public Button pauseShopButton;
+
+    [Tooltip("Shop panel to enable when opening from pause")]
+    public GameObject shopPanel;
+
+    [Header("Shop - Ads UI")]
+    [Tooltip("Button on the shop panel to watch ads")]
+    public Button watchAdsButton;
+
+    [Tooltip("Ads UI panel to display when watching ads")]
+    public GameObject adsPanel;
+
+    [Tooltip("Optional: Close button inside ads UI to return to shop")]
+    public Button adsCloseButton;
+
+    [Header("Shop - Item UI")]
+    [Tooltip("Text component for the shop item label (UI Text)")]
+    public Text shopItemText;
+
+    [Tooltip("TextMeshPro component for the shop item label (TMP)")]
+#if TMP_PRESENT
+    public TMPro.TMP_Text shopItemTextTMP;
+#else
+    public UnityEngine.Object shopItemTextTMP;
+#endif
+
+    [Tooltip("Exit/Close button inside the shop to return to the pause menu")]
+    public Button shopExitButton;
+
+    [Tooltip("Text object shown before watching an ad (GameObject containing text)")]
+    public GameObject shopItemBeforeText;
+
+    [Tooltip("Text object shown after watching an ad (GameObject containing text)")]
+    public GameObject shopItemAfterText;
 
     private void Awake()
     {
@@ -107,6 +143,28 @@ public class Buttons : MonoBehaviour
             pauseQuitGameButton.onClick.AddListener(ExitGame);
         }
 
+        if (pauseShopButton != null)
+        {
+            pauseShopButton.onClick.AddListener(OpenShopFromPause);
+        }
+
+        // Register shop/ads buttons
+        if (watchAdsButton != null)
+        {
+            watchAdsButton.onClick.AddListener(OpenAdsPanel);
+        }
+
+        if (adsCloseButton != null)
+        {
+            adsCloseButton.onClick.AddListener(CloseAdsPanel);
+        }
+
+        // Register shop exit
+        if (shopExitButton != null)
+        {
+            shopExitButton.onClick.AddListener(CloseShopAndReturnToPause);
+        }
+
         // Fallback: try to auto-find Play / Exit buttons inside menuPanel by visible text if fields not assigned
         if (menuPanel != null)
         {
@@ -125,7 +183,7 @@ public class Buttons : MonoBehaviour
                     }
                 }
 
-#if UNITY_TEXTMESHPRO_PRESENT
+#if TMP_PRESENT
                 if (playButton == null)
                 {
                     var tmp = b.GetComponentInChildren<TMPro.TMP_Text>();
@@ -147,7 +205,7 @@ public class Buttons : MonoBehaviour
                     }
                 }
 
-#if UNITY_TEXTMESHPRO_PRESENT
+#if TMP_PRESENT
                 if (exitButton == null)
                 {
                     var tmp2 = b.GetComponentInChildren<TMPro.TMP_Text>();
@@ -180,6 +238,14 @@ public class Buttons : MonoBehaviour
         // Ensure pause panel hidden initially
         if (pausePanel != null)
             pausePanel.SetActive(false);
+
+        // Ensure shop panel hidden initially
+        if (shopPanel != null)
+            shopPanel.SetActive(false);
+
+        // Ensure ads panel hidden initially
+        if (adsPanel != null)
+            adsPanel.SetActive(false);
 
         // Debugging helpers
         if (UnityEngine.EventSystems.EventSystem.current == null)
@@ -239,7 +305,7 @@ public class Buttons : MonoBehaviour
             return;
         }
 
-#if UNITY_TEXTMESHPRO_PRESENT
+#if TMP_PRESENT
         if (pauseButtonTMPText != null)
         {
             pauseButtonTMPText.text = text;
@@ -257,7 +323,7 @@ public class Buttons : MonoBehaviour
                 return;
             }
 
-#if UNITY_TEXTMESHPRO_PRESENT
+#if TMP_PRESENT
             var tmp = pauseButton.GetComponentInChildren<TMPro.TMP_Text>();
             if (tmp != null)
             {
@@ -438,5 +504,118 @@ public class Buttons : MonoBehaviour
         {
             Debug.LogWarning("menuPanel and gameRoot are the same GameObject. This will cause immediate disable when Play is pressed.");
         }
+    }
+
+    public void OpenShopFromPause()
+    {
+        if (shopPanel != null)
+            shopPanel.SetActive(true);
+
+        if (pausePanel != null)
+            pausePanel.SetActive(false);
+    }
+
+    public void OpenAdsPanel()
+    {
+        if (adsPanel == null)
+        {
+            Debug.LogWarning("OpenAdsPanel: adsPanel is not assigned. Assign it in the Buttons inspector.");
+            return;
+        }
+
+        // Activate ads panel and ensure any Canvas/CanvasGroup under it are enabled so it actually renders
+        adsPanel.SetActive(true);
+        var canvases = adsPanel.GetComponentsInChildren<Canvas>(true);
+        foreach (var c in canvases)
+        {
+            if (c != null && c.gameObject != null)
+            {
+                c.gameObject.SetActive(true);
+                c.enabled = true;
+                var cg = c.gameObject.GetComponent<CanvasGroup>();
+                if (cg != null)
+                {
+                    cg.alpha = 1f;
+                    cg.interactable = true;
+                    cg.blocksRaycasts = true;
+                }
+            }
+        }
+
+        // Do not hide the shop panel — keep it visible beneath the ads UI
+        Debug.Log("OpenAdsPanel: adsPanel activated (shop left visible)");
+    }
+
+    public void CloseAdsPanel()
+    {
+        if (adsPanel != null)
+            adsPanel.SetActive(false);
+
+        // Remove the watch-ads button to prevent spamming
+        if (watchAdsButton != null)
+        {
+            try
+            {
+                watchAdsButton.gameObject.SetActive(false);
+            }
+            catch { /* ignore if already destroyed */ }
+        }
+
+        // Change shop item text to indicate coin earned increase (TMP/text update preserved)
+        SetShopItemText("Coin Earned Increased");
+
+        // Toggle before/after UI GameObjects if assigned
+        if (shopItemBeforeText != null)
+            shopItemBeforeText.SetActive(false);
+        if (shopItemAfterText != null)
+            shopItemAfterText.SetActive(true);
+
+        // Increase coins-per-shopper directly on all counters by 1
+        var counters = FindObjectsOfType<CounterBehaviour>();
+        int increased = 0;
+        foreach (var c in counters)
+        {
+            if (c != null)
+            {
+                c.coinsPerShopper += 1;
+                increased++;
+            }
+        }
+        Debug.Log($"CloseAdsPanel: increased coinsPerShopper by 1 on {increased} counters.");
+
+        Debug.Log("CloseAdsPanel: adsPanel closed, watchAdsButton disabled, shop item updated");
+    }
+
+    private void SetShopItemText(string text)
+    {
+#if TMP_PRESENT
+        if (shopItemTextTMP != null)
+        {
+            shopItemTextTMP.text = text;
+            return;
+        }
+        // Fallback to legacy UI Text if TMP not available or not assigned
+        if (shopItemText != null)
+        {
+            shopItemText.text = text;
+            return;
+        }
+#else
+        if (shopItemText != null)
+        {
+            shopItemText.text = text;
+            return;
+        }
+#endif
+        Debug.LogWarning("SetShopItemText: No valid text component found for shop item text. Assign a TMP or UI Text in the Buttons inspector.");
+    }
+
+    public void CloseShopAndReturnToPause()
+    {
+        if (shopPanel != null)
+            shopPanel.SetActive(false);
+
+        if (pausePanel != null)
+            pausePanel.SetActive(true);
     }
 }
