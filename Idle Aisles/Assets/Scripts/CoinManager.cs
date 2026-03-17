@@ -10,6 +10,9 @@ public static class CoinManager
     // Event fired when coin total changes. Subscribers receive the new total.
     public static event Action<int> OnCoinsChanged;
 
+    // Extra coins awarded per shopper from bonuses (e.g., trader3 quest)
+    public static int ExtraPerShopper { get; set; } = 0;
+
     public static void AddCoins(int amount)
     {
         if (amount <= 0) return;

@@ -20,6 +20,13 @@ public class TraderSystem : MonoBehaviour
     public Text trader2CostText;
     public TMP_Text trader2CostTextTMP;
 
+    // Trader 3 UI (quest)
+    public Text trader3Label;
+    public TMP_Text trader3LabelTMP;
+    public Button trader3Button; // optional, not required for auto-award
+    public Text trader3ProgressText;
+    public TMP_Text trader3ProgressTextTMP;
+
     // Coin display (supports UI Text or TextMeshPro)
     public Text coinText;
     public TMP_Text coinTextTMP;
@@ -28,6 +35,12 @@ public class TraderSystem : MonoBehaviour
     private int trader1Level = 0; // 0..5
     private int trader2Level = 0; // 0..5
     private const int maxLevel = 5;
+
+    // Trader3 quest: milestones and progress
+    private int[] trader3Milestones = new int[] { 30, 70, 120 };
+    private int trader3Index = 0; // which milestone we're currently working toward
+    private int trader3Progress = 0; // progress toward current milestone
+    private bool trader3Maxed = false;
 
     // References to systems to apply upgrades
     public ShopperSpawner shopperSpawner;
@@ -43,6 +56,8 @@ public class TraderSystem : MonoBehaviour
             trader1Button.onClick.AddListener(UpgradeTrader1);
         if (trader2Button != null)
             trader2Button.onClick.AddListener(UpgradeTrader2);
+        if (trader3Button != null)
+            trader3Button.onClick.AddListener(() => { /* optional: show details */ });
 
         // Try to find systems if not assigned
         if (shopperSpawner == null)
@@ -65,7 +80,57 @@ public class TraderSystem : MonoBehaviour
 
     private void OnCoinsChanged(int newTotal)
     {
+        // determine how many coins were earned since last update
+        int delta = 0;
+        if (lastKnownCoins < 0)
+        {
+            // first time, just set
+            delta = 0;
+        }
+        else
+        {
+            delta = newTotal - lastKnownCoins;
+        }
+
+        if (delta > 0)
+        {
+            AddToTrader3Progress(delta);
+        }
+
+        lastKnownCoins = newTotal;
         UpdateUI(true);
+    }
+
+    private void AddToTrader3Progress(int coinsEarned)
+    {
+        if (trader3Maxed || trader3Index >= trader3Milestones.Length) return;
+
+        int remaining = coinsEarned;
+        while (remaining > 0 && trader3Index < trader3Milestones.Length)
+        {
+            int target = trader3Milestones[trader3Index];
+            int needed = target - trader3Progress;
+            int take = Mathf.Min(remaining, needed);
+            trader3Progress += take;
+            remaining -= take;
+
+            if (trader3Progress >= target)
+            {
+                // Completed this milestone: award extra coin per shopper
+                CoinManager.ExtraPerShopper += 1;
+                Debug.Log($"Trader3 quest: completed milestone {target}. ExtraPerShopper is now {CoinManager.ExtraPerShopper}.");
+
+                // move to next milestone and reset progress to 0 (explicitly as requested)
+                trader3Index++;
+                trader3Progress = 0;
+
+                if (trader3Index >= trader3Milestones.Length)
+                {
+                    trader3Maxed = true;
+                    break;
+                }
+            }
+        }
     }
 
     private void UpdateUI(bool force = false)
@@ -96,6 +161,28 @@ public class TraderSystem : MonoBehaviour
 
         if (trader2Button != null)
             trader2Button.interactable = trader2Level < maxLevel && CoinManager.Coins >= GetTrader2NextCost();
+
+        // Trader 3 (quest) - show coins earned progress. This tracks coins earned (not spent) and resets progress after each milestone.
+        if (!trader3Maxed && trader3Index < trader3Milestones.Length)
+        {
+            int target = trader3Milestones[trader3Index];
+            // Label indicates this is coins-earned progress so player knows they don't need to keep the coins
+            string t3Label = $"Trader 3: Coins Earned {trader3Progress}/{target} (Coins earned increase)";
+            if (CoinManager.ExtraPerShopper > 0)
+                t3Label += " (Coins earned increased)";
+
+            SetText(trader3Label, trader3LabelTMP, t3Label);
+            SetText(trader3ProgressText, trader3ProgressTextTMP, $"Progress: {trader3Progress}/{target}");
+            if (trader3Button != null)
+                trader3Button.interactable = true; // submit button can be used for details
+        }
+        else
+        {
+            SetText(trader3Label, trader3LabelTMP, "Trader 3: Completed (Coins earned increased)");
+            SetText(trader3ProgressText, trader3ProgressTextTMP, "Max");
+            if (trader3Button != null)
+                trader3Button.interactable = false;
+        }
 
         // Coin display
         SetText(coinText, coinTextTMP, $"Coins: {CoinManager.Coins}");
