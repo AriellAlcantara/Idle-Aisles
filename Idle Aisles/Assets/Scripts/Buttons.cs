@@ -455,29 +455,23 @@ public class Buttons : MonoBehaviour
 
     public void QuitSession()
     {
-        Debug.Log("QuitSession invoked: clearing progress and returning to main menu");
+        Debug.Log("QuitSession invoked: clearing progress and restarting scene to reset game state");
         // Ensure timeScale is normal before switching
         Time.timeScale = 1f;
-        // Clear saved progress (PlayerPrefs) to restart progress - adjust if your game stores progress elsewhere
+
+        // Clear saved progress
         PlayerPrefs.DeleteAll();
 
-        // Hide game UI
-        if (gamePanel != null)
-            gamePanel.SetActive(false);
-        if (gameRoot != null)
-            gameRoot.SetActive(false);
+        // Reset runtime stateful managers/statics
+        try { CoinManager.ResetAll(); } catch { }
+        try { CounterBehaviour.GlobalCoinsBonus = 0; } catch { }
 
-        // Hide pause UI and re-enable pause button
-        if (pausePanel != null)
-            pausePanel.SetActive(false);
-        if (pauseButton != null)
-            pauseButton.gameObject.SetActive(true);
+        // If you have other static managers, reset them here (example placeholders):
+        // Example: TraderSystem.ResetStaticState();
 
-        // Show main menu panel
-        if (menuPanel != null)
-            menuPanel.SetActive(true);
-
-        // Optionally, you might want to reset other runtime state here
+        // Reload the active scene to fully restart the game state without quitting the application
+        var active = SceneManager.GetActiveScene();
+        SceneManager.LoadScene(active.name, LoadSceneMode.Single);
     }
 
     public void ExitGame()

@@ -9,6 +9,9 @@ public class StatsDisplay : MonoBehaviour
     public TMP_Text coinsPerShopperText;
     public TMP_Text resupplySpeedText;
 
+    [Header("Additional UI")]
+    public TMP_Text coinsTotalText; // new: show current coin total
+
     [Header("References (auto-find if empty)")]
     public ShopperSpawner shopperSpawner;
     public YieldSystem yieldSystem;
@@ -47,7 +50,7 @@ public class StatsDisplay : MonoBehaviour
     private void AutoAssignTextFields()
     {
         // If already assigned, nothing to do
-        if (maxShoppersText != null && coinsPerShopperText != null && resupplySpeedText != null)
+        if (maxShoppersText != null && coinsPerShopperText != null && resupplySpeedText != null && coinsTotalText != null)
             return;
 
         // Search TMP_Text components under this GameObject first
@@ -74,15 +77,21 @@ public class StatsDisplay : MonoBehaviour
         // Try to assign maxShoppersText (keywords: max, shopper)
         if (maxShoppersText == null)
         {
-            var candidate = FindByKeywords(new string[] { "max", "shopper", "max shopper", "shopper max" });
+            var candidate = FindByKeywords(new string[] { "max shopper", "shopper max", "max", "shopper" });
             if (candidate == null && tmps.Length >= 1) candidate = tmps[0];
             maxShoppersText = candidate;
         }
 
-        // Try to assign coinsPerShopperText (keywords: coin, coins)
+        // Try to assign coinsPerShopperText (prefer explicit 'per shopper' phrasing)
         if (coinsPerShopperText == null)
         {
-            var candidate = FindByKeywords(new string[] { "coin", "coins", "per shopper", "coins per" });
+            var candidate = FindByKeywords(new string[] { "per shopper", "coins per", "coin per", "coins per shopper" });
+            if (candidate == null)
+            {
+                // fallback to coins keyword
+                candidate = FindByKeywords(new string[] { "coin", "coins" });
+            }
+
             if (candidate == null)
             {
                 // pick the next unmatched TMP
@@ -98,7 +107,7 @@ public class StatsDisplay : MonoBehaviour
         // Try to assign resupplySpeedText (keywords: resupply, speed, replenish)
         if (resupplySpeedText == null)
         {
-            var candidate = FindByKeywords(new string[] { "resupply", "resupply speed", "replenish", "speed" });
+            var candidate = FindByKeywords(new string[] { "resupply speed", "resupply", "replenish", "speed" });
             if (candidate == null)
             {
                 // pick the next unmatched TMP
@@ -109,6 +118,22 @@ public class StatsDisplay : MonoBehaviour
                 }
             }
             resupplySpeedText = candidate;
+        }
+
+        // Try to assign coinsTotalText (keywords: total, balance, wallet, coins total)
+        if (coinsTotalText == null)
+        {
+            var candidate = FindByKeywords(new string[] { "coins total", "coin total", "total coins", "total", "balance", "wallet" });
+            if (candidate == null)
+            {
+                // pick the next unmatched TMP
+                foreach (var t in tmps)
+                {
+                    if (t == maxShoppersText || t == coinsPerShopperText || t == resupplySpeedText) continue;
+                    candidate = t; break;
+                }
+            }
+            coinsTotalText = candidate;
         }
     }
 
@@ -140,5 +165,8 @@ public class StatsDisplay : MonoBehaviour
             coinsPerShopperText.text = $"Coins per shopper: {coinsPerShopper}";
         if (resupplySpeedText != null)
             resupplySpeedText.text = $"Resupply Speed: {replenishInterval:0.00}s";
+
+        if (coinsTotalText != null)
+            coinsTotalText.text = $"Coins: {CoinManager.Coins}";
     }
 }

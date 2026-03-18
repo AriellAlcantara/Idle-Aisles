@@ -28,4 +28,12 @@ public static class CoinManager
         OnCoinsChanged?.Invoke(coins);
         return true;
     }
+
+    // Reset runtime state (used when restarting session)
+    public static void ResetAll()
+    {
+        coins = 0;
+        ExtraPerShopper = 0;
+        OnCoinsChanged?.Invoke(coins);
+    }
 }
